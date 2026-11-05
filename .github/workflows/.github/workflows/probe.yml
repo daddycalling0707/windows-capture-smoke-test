@@ -1,0 +1,33 @@
+name: Disposable Windows capture probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native-capture:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch and verify public FFmpeg build
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          Invoke-WebRequest 'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip' -OutFile ffmpeg.zip
+          $expected='60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba'
+          if((Get-FileHash ffmpeg.zip -Algorithm SHA256).Hash.ToLower() -ne $expected){throw 'FFmpeg ZIP hash mismatch'}
+          Expand-Archive ffmpeg.zip -DestinationPath ffmpeg
+          $exe=(Get-ChildItem ffmpeg -Filter ffmpeg.exe -Recurse | Select-Object -First 1).FullName
+          $exe | Set-Content ffmpeg-path.txt
+      - name: Record changing desktop marker
+        shell: pwsh
+        run: |
+          .\Test-WGC.ps1 -FFmpeg (Get-Content ffmpeg-path.txt) -OutDir "$PWD\results"
+      - name: Collect probe evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-capture-probe
+          path: results
+          retention-days: 1
+          if-no-files-found: warn
